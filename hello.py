@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.animation import FuncAnimation
+from matplotlib.widgets import Slider
 # 定義MahonyAHRS
 class MahonyAHRS:
     def __init__(self, sample_rate, kp=1.0, ki=0.0):
@@ -122,10 +124,13 @@ for acc, gyro, mag in zip(accelerometer_data, gyroscope_data, magnetometer_data)
     
     # 使用已计算的欧拉角来生成旋转矩阵
     R = euler_to_rotation_matrix(*angles)
-    rotation_matrices.append(R)# 創建時間軸
+    rotation_matrices.append(R)
 
 
 
+
+# 创建时间轴
+time_axis = np.arange(len(euler_angles)) / sample_rate
 
 
 # 计算欧拉角和旋转矩阵
@@ -135,13 +140,14 @@ for acc, gyro, mag in zip(accelerometer_data, gyroscope_data, magnetometer_data)
     mahony_filter.update(gyro, acc, mag)
     roll, pitch, yaw = mahony_filter.get_euler_angles()
     euler_angles.append((roll, pitch, yaw))
-    
     R = euler_to_rotation_matrix(roll, pitch, yaw)
     rotation_matrices.append(R)
 
 # 绘制欧拉角度变化图
 plt.figure(figsize=(12, 9))
 
+# 定义初始朝向向量
+initial_vector = np.array([1, 0, 0])
 # 绘制Roll角度变化
 plt.subplot(3, 1, 1)
 plt.plot(time_axis, [np.degrees(angle[0]) for angle in euler_angles], label='Roll')
@@ -166,24 +172,35 @@ plt.grid(True)
 
 plt.tight_layout()
 plt.legend()
-plt.show()
 
-# 三维可视化传感器朝向...
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-initial_vector = np.array([1, 0, 0])
-step = 10
+# 创建绘图和轴
+fig2 = plt.figure()
+ax2 = fig2.add_subplot(111, projection='3d', autoscale_on=False)
+ax2.set_xlim([-1, 1])
+ax2.set_ylim([-1, 1])
+ax2.set_zlim([-1, 1])
 
-for i, R in enumerate(rotation_matrices):
-    if i % step == 0:
-        transformed_vector = np.dot(R, initial_vector)
-        ax.quiver(0, 0, 0, transformed_vector[0], transformed_vector[1], transformed_vector[2], length=0.1, normalize=True)
+# 计算总时间（秒）
+total_time = len(rotation_matrices) / sample_rate
 
-ax.set_xlim([-1, 1])
-ax.set_ylim([-1, 1])
-ax.set_zlim([-1, 1])
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_title('Sensor Orientation Over Time')
+# 添加滑块的轴和滑块
+ax_slider = fig2.add_axes([0.2, 0.02, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+slider = Slider(ax_slider, 'Time (s)', 0, total_time, valinit=0, valfmt='%0.2f s')
+
+# 初始化显示的线条和点
+line, = ax2.plot([0], [0], [0], 'b-', lw=2, label='Sensor Orientation')
+point, = ax2.plot([0], [0], [0], 'bo')
+
+def update(val):
+    i = min(int(slider.val * sample_rate), len(rotation_matrices) - 1)
+    R = rotation_matrices[i]
+    transformed_vector = np.dot(R, initial_vector)
+    line.set_data([0, transformed_vector[0]], [0, transformed_vector[1]])
+    line.set_3d_properties([0, transformed_vector[2]])
+    point.set_data([transformed_vector[0]], [transformed_vector[1]])
+    point.set_3d_properties([transformed_vector[2]])
+    fig2.canvas.draw_idle()
+
+slider.on_changed(update)
+
 plt.show()
